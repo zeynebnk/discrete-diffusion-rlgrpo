@@ -32,7 +32,7 @@ def generate_dataset():
         input_ids = torch.tensor(input_ids).to(model.device).unsqueeze(0)
 
         
-        _, agg_X, agg_y = generate_for_datagen(agg_X, agg_y, model, input_ids, steps=10)
+        _, agg_X, agg_y = generate_for_datagen(agg_X, agg_y, True, model, input_ids, steps=10)
         
     
     with open("logits_ds_X.pkl", "wb") as f:
@@ -49,7 +49,7 @@ def create_datapoint(agg_X, agg_y, logits, remasked_idx, timestep):
 
 
 @ torch.no_grad()
-def generate_for_datagen(agg_X, agg_y, model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
+def generate_for_datagen(agg_X, agg_y, save_logits, model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
              cfg_scale=0., remasking='low_confidence', mask_id=126336):
     '''
     Args:
@@ -87,7 +87,10 @@ def generate_for_datagen(agg_X, agg_y, model, prompt, steps=128, gen_length=128,
                 logits, un_logits = torch.chunk(logits, 2, dim=0)
                 logits = un_logits + (cfg_scale + 1) * (logits - un_logits)
             else:
-                logits = model(x).logits
+                out = model(x, output_hidden_states=True)
+                logits = out.logits
+                hidden_states = out.hidden_states[-1]
+                
 
             logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
 
@@ -113,9 +116,12 @@ def generate_for_datagen(agg_X, agg_y, model, prompt, steps=128, gen_length=128,
                 transfer_index[j, select_index] = True
             x[transfer_index] = x0[transfer_index]
             
-            agg_X, agg_y = create_datapoint(agg_X, agg_y, logits_with_noise, ~transfer_index, i)
+            if save_logits:
+                agg_X, agg_y = create_datapoint(agg_X, agg_y, logits_with_noise[:, prompt.shape[1]:, :], ~transfer_index[:,prompt.shape[1]:], i)
+            else:
+                agg_X, agg_y = create_datapoint(agg_X, agg_y, hidden_states[:, prompt.shape[1]:, :], ~transfer_index[:,prompt.shape[1]:], i)
             print(agg_X.shape, agg_y.shape)
+            
     return x, agg_X, agg_y
 
 generate_dataset()
-
