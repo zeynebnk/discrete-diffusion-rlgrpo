@@ -34,13 +34,10 @@ def extract_hash_answer(text: str) -> str | None:
 
 
 def get_gsm8k_questions(split="train") -> Dataset:
-    data = load_dataset("openai/gsm8k", "main")[split]
+    data = load_dataset("openai/gsm8k", "main", split=split)
     data = data.map(
         lambda x: {
-            "prompt": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": x["question"]},
-            ],
+            "question": x["question"],
             "answer": extract_hash_answer(x["answer"]),
         }
     )
