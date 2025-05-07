@@ -24,10 +24,8 @@ class MaskPolicy(nn.Module):
             nn.Sigmoid()
         )
          
-    def forward(self, inputs, gen_len):
-        
-        batch_size, seq_len, _ = inputs.shape
-    
+    def forward(self, inputs):
+            
         X = self.proj(inputs)  # bs, gen_len, hidden_size
         X = self.transformer(X)  # bs, gen_len, hidden_size
         
