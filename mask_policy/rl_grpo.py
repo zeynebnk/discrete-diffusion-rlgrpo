@@ -20,97 +20,122 @@ class MaskPolicyDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
 
-def accuracy_reward(masks, y):
-    return (masks == y).sum(dim=-1) / masks.shape[-1]
- 
+class DummyDataset(Dataset):
+    def __init__(self):
+        self.X = torch.rand((100,5,2))
+        self.y = (self.X.sum(dim=2) > 1) * 1
+        
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+
+def kl(p, p_ref):
+    
+    # get kl / probs
+    kl_pos = p * (torch.log(p) - torch.log(p_ref))
+    kl_neg = (1 - p) * (torch.log(1 - p) - torch.log(1 - p_ref))
+    
+    # Sum both components
+    kl = kl_pos + kl_neg
+    
+    return kl.mean()
+
 def train_step():
     # prep! 
-    G = 100  # num samples
+    G = 8  # num samples
     epsilon = 0.2  # clip limit
-    beta = 0.0001  # kl penalty weight
-    lr = 0.001
-
+    beta = 0.000  # kl penalty weight
+    lr = 0.01
     
     # cur and ref policy
-    hidden_size, n_layers, n_heads = 512, 8, 8
-    policy = MaskPolicy(hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads)
-    ref_policy = MaskPolicy(hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads).eval()
+    hidden_size, n_layers, n_heads = 256, 64, 16
+    policy = MaskPolicy(2,hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads)
+    ref_policy = MaskPolicy(2,hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads).eval()
     ref_policy.load_state_dict(policy.state_dict())
     
     optimizer = optim.Adam(policy.parameters(), lr=lr)
 
     # pregen dataset, stepwise only!! 
-    dl = DataLoader(MaskPolicyDataset(), batch_size=32, shuffle=True)
+    dl = DataLoader(DummyDataset(), batch_size=128, shuffle=True)
     for k, data_batch in enumerate(dl):
         X, y = data_batch
         gen_len = X.shape[1]
 
         # sample outputs from policy
-        fwpass = policy(X, gen_len) # bs, gen_len
+        fwpass = policy(X) # bs, gen_len
         fwpass = fwpass.unsqueeze(1).expand(-1, G, -1)
-
+        fwpass = fwpass.clamp(1e-8, 1.0 - 1e-8)
+        
         with torch.no_grad():
-            samples = torch.bernoulli(fwpass) # bs, G, gen_len
 
-            fwpass_ref = ref_policy(X, gen_len) # bs, gen_len
+            fwpass_ref = ref_policy(X) # bs, gen_len
             fwpass_ref = fwpass_ref.unsqueeze(1).expand(-1, G, -1)
 
-        # logprobs
-        logprobs_ref = torch.where(samples == 1, 
-                       torch.log(fwpass_ref), 
-                       torch.log(1 - fwpass_ref)).sum(dim=-1) # bs, G
+            samples = torch.bernoulli(fwpass) # bs, G, gen_len
+
         
-        logprobs = torch.where(samples == 1, 
+        fwpass_ref = fwpass_ref.clamp(1e-8, 1.0 - 1e-8)
+           
+
+        log_probs = torch.where(samples == 1, 
                        torch.log(fwpass), 
-                       torch.log(1 - fwpass)).sum(dim=-1) # bs, G
+                       torch.log(1 - fwpass))
 
+        log_probs_ref = torch.where(samples == 1, 
+                                torch.log(fwpass_ref), 
+                                torch.log(1 - fwpass_ref))
+
+        ratios = torch.exp(log_probs.sum(dim=-1) - log_probs_ref.sum(dim=-1).detach())
+        
         # r, a
-        rewards = (samples == y.unsqueeze(1).expand(-1, G, -1)).float().mean(dim=-1) + 1e-8
+        rewards = (samples == y.unsqueeze(1).expand(-1, G, -1)).float().mean(dim=-1)
         advantages = (rewards - rewards.mean(dim=1, keepdim=True)) / (rewards.std(dim=1, keepdim=True) + 1e-8)
-
-        # ratios
-        ratios = torch.exp(logprobs - logprobs_ref)
-        clipped_ratios = torch.clamp(ratios, 1 - epsilon, 1 + epsilon)
-
+        
         # loss
-        loss_policy = -torch.min(ratios * advantages, clipped_ratios * advantages).mean() / G
+        clipped_ratios = torch.clamp(ratios, 1 - epsilon, 1 + epsilon)
+        loss_policy = -torch.min(ratios * advantages, clipped_ratios * advantages).mean()
         
         # kl
-        ratio_kl = fwpass_ref.detach() / fwpass
-        kl_penalty = (ratio_kl - torch.log(ratio_kl) - 1).mean()
+        kl_penalty = kl(fwpass, fwpass_ref.detach())
 
         total_loss = loss_policy + beta * kl_penalty
 
-       
-
+        optimizer.zero_grad()
         total_loss.backward()
-
-        '''
+        
         for param in policy.parameters():
             if param.grad is not None:
                 print(param.grad.norm().item())
             else:
                 print("NONE")
-        '''
+        
 
         optimizer.step()
-        optimizer.zero_grad()
+
+        with torch.no_grad():
+            pred = (policy(X) > 0.5) * 1
+            print((pred == y).float().mean(dim=-1).mean())
         
         # ref_policy.load_state_dict(policy.state_dict()) # for updating ref policy
 
-
         print(f"loss: {loss_policy.item()}, kl: {kl_penalty.item()}, avg_r: {rewards.mean().item()}, max_r: {rewards.max().item()}")
 
-        return policy
+    return policy
+
 def train_loop():
     all_grad_history = []
-    epochs = 20
+    epochs = 100
 
     for i in range(epochs):
         print(f"Epoch {i+1} of {epochs}")
         policy = train_step()
-
+    
     torch.save(policy.state_dict(), "policy.pth")
+
+    return policy
+
 train_loop()
 
 
