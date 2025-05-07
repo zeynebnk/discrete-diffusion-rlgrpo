@@ -37,17 +37,16 @@ def kl(p, p_ref):
     kl_pos = p * (torch.log(p) - torch.log(p_ref))
     kl_neg = (1 - p) * (torch.log(1 - p) - torch.log(1 - p_ref))
     
-    # Sum both components
     kl = kl_pos + kl_neg
     
     return kl.mean()
 
 def train_step():
     # prep! 
-    G = 8  # num samples
+    G = 16  # num samples
     epsilon = 0.2  # clip limit
-    beta = 0.000  # kl penalty weight
-    lr = 0.01
+    beta = 0.0001  # kl penalty weight
+    lr = 0.001
     
     # cur and ref policy
     hidden_size, n_layers, n_heads = 256, 64, 16
@@ -105,11 +104,13 @@ def train_step():
         optimizer.zero_grad()
         total_loss.backward()
         
+        '''
         for param in policy.parameters():
             if param.grad is not None:
                 print(param.grad.norm().item())
             else:
                 print("NONE")
+        '''
         
 
         optimizer.step()
@@ -118,7 +119,7 @@ def train_step():
             pred = (policy(X) > 0.5) * 1
             print((pred == y).float().mean(dim=-1).mean())
         
-        # ref_policy.load_state_dict(policy.state_dict()) # for updating ref policy
+        ref_policy.load_state_dict(policy.state_dict()) # for updating ref policy
 
         print(f"loss: {loss_policy.item()}, kl: {kl_penalty.item()}, avg_r: {rewards.mean().item()}, max_r: {rewards.max().item()}")
 
