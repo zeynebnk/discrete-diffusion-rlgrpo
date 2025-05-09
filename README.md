@@ -1,7 +1,26 @@
 # discrete-diffusion-rlgrpo
 
-## rl
-get logits_ds_X.pkl, logits_ds_y.pkl (or run get_logits_dataset.py) -> run rl_grpo.py
+## dw rl
+generate stepwise simulation dataset
+
+run get_logits_dataset.py
+
+```
+# python get_logits_dataset.py
+```
+args: 
+--steps, --block_length, --gen_length, --temperature, --remasking, --split (# prompts), --out_pref
+
+
+run stepwise rl (grpo)
+
+run rl_grpo_sw.py
+
+```
+# python rl_grpo_sw.py
+```
+args: 
+--X_path, --y_path, --G (num samples), --epsilon (clip limit), --beta (kl penalty w), --lr, --epochs, --update_ref_every, --hidden_size, --n_layers, --n_heads, out_pref
 
 ## eval
 modified lm_eval / utils and lm_eval / models / huggingface.py for custom generate + ll
