@@ -1,6 +1,6 @@
 # discrete-diffusion-rlgrpo
 
-## dw rl
+## sw rl
 generate stepwise simulation dataset
 
 run get_logits_dataset.py
