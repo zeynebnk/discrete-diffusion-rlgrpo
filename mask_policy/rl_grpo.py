@@ -23,7 +23,7 @@ class MaskPolicyDataset(Dataset):
 
 class DummyDataset(Dataset):
     def __init__(self):
-        self.X = torch.rand((100,5,256))
+        self.X = torch.rand((500,5,256))
         self.y = (self.X.sum(dim=2) > 128) * 1
         
     def __len__(self):
@@ -42,10 +42,8 @@ def kl(p, p_ref):
     
     return kl.mean()
 
-def train_step(policy, ref_policy, optimizer, G, epsilon, beta):
-
-    # pregen dataset, stepwise only!! 
-    dl = DataLoader(DummyDataset(), batch_size=16, shuffle=True)
+def train_step(policy, ref_policy, optimizer, G, epsilon, beta, dl):
+   
     for k, data_batch in enumerate(dl):
         X, y = data_batch
         gen_len = X.shape[1]
@@ -105,49 +103,54 @@ def train_step(policy, ref_policy, optimizer, G, epsilon, beta):
 
     return policy
 
-def train_loop():
+def train_loop(): 
     # prep! 
-    update_ref_every = 10
+    update_ref_every = 50
         
-    G = 4  # num samples
+    G = 10  # num samples
     epsilon = 0.2  # clip limit
     beta = 0.0001  # kl penalty weight
-    lr = 1e-5
+    lr = 1e-4
 
     # cur and ref policy
-    hidden_size, n_layers, n_heads = 256, 4, 8
-    policy = MaskPolicy(2,hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads)
-    ref_policy = MaskPolicy(2,hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads).eval()
+    hidden_size, n_layers, n_heads = 256, 2, 4
+    policy = MaskPolicy(256,hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads)
+    ref_policy = MaskPolicy(256,hidden_size=hidden_size, n_layers=n_layers, n_heads=n_heads).eval()
     ref_policy.load_state_dict(policy.state_dict())
     
     optimizer = optim.Adam(policy.parameters(), lr=lr)
 
+    # pregen dataset, stepwise only!! 
+    ds = DummyDataset()
+    dl = DataLoader(ds, batch_size=16, shuffle=True)
+
     epochs = 500
 
-    '''with open("logits_ds_X (1).pkl", "rb") as f:    
-        fullX = pickle.load(f)
-    with open("logits_ds_y (2).pkl", "rb") as f:
-        fully = pickle.load(f)'''
+    hist = []
 
-    fullX = DummyDataset().X
-    fully = DummyDataset().y
+
     for i in range(epochs):
         print(f"Epoch {i+1} of {epochs}")
-        policy = train_step(policy, ref_policy, optimizer, G, epsilon, beta)
+        policy = train_step(policy, ref_policy, optimizer, G, epsilon, beta, dl)
 
         with torch.no_grad():
-            pred = (policy(fullX) > 0.5) * 1
-            print((pred == fully).float().mean(dim=-1).mean())
+            pred = (policy(ds.X) > 0.5) * 1
+            acc = (pred == ds.y).float().mean(dim=-1).mean()
+            hist.append(acc.item())
+
+            print(acc)
 
         if i % update_ref_every == 0:
-            ref_policy.load_state_dict(policy.state_dict()) # for updating ref policy
+           ref_policy.load_state_dict(policy.state_dict()) # for updating ref policy
         
     
     torch.save(policy.state_dict(), "policy.pth")
 
-    return policy
+    return policy, hist
 
-train_loop()
+policy, hist = train_loop()
+print(hist)
+
 
 
 
