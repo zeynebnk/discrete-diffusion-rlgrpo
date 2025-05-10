@@ -12,7 +12,7 @@ import argparse
 
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)  
-    model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True)  
+    model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True).to('cuda')
     return tokenizer, model
 
 def generate_dataset(args):
@@ -32,14 +32,14 @@ def generate_dataset(args):
         input_ids = torch.tensor(input_ids).to(model.device).unsqueeze(0)
 
         
-        _, agg_X, agg_y = generate_for_datagen(agg_X, agg_y, True, model, input_ids, steps=args.steps, gen_length=args.gen_length, block_length=args.block_length, temperature=args.temperature, remasking=args.remasking)
+        _, agg_X, agg_y = generate_for_datagen(agg_X, agg_y, model, input_ids, steps=args.steps, gen_length=args.gen_length, block_length=args.block_length, temperature=args.temperature, remasking=args.remasking)
     
-    agg_X = torch.cat(agg_X, dim=0)
-    agg_y = torch.cat(agg_y, dim=0)
+    agg_X = torch.cat(agg_X, dim=0).cpu()
+    agg_y = torch.cat(agg_y, dim=0).cpu()
     
-    with open(args.out_pref+"_logits_ds_X.pkl", "wb") as f:
+    with open(args.out_pref+"_ds_X.pkl", "wb") as f:
         pickle.dump(agg_X, f)
-    with open(args.out_pref+"_logits_ds_y.pkl", "wb") as f:
+    with open(args.out_pref+"_ds_y.pkl", "wb") as f:
         pickle.dump(agg_y, f)
 
 def create_datapoint(agg_X, agg_y, logits, remasked_idx, timestep):
@@ -55,7 +55,7 @@ def create_datapoint(agg_X, agg_y, logits, remasked_idx, timestep):
 
 
 @ torch.no_grad()
-def generate_for_datagen(agg_X, agg_y, save_logits, model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
+def generate_for_datagen(agg_X, agg_y, model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
              cfg_scale=0., remasking='low_confidence', mask_id=126336):
     '''
     Args:
@@ -122,10 +122,7 @@ def generate_for_datagen(agg_X, agg_y, save_logits, model, prompt, steps=128, ge
                 transfer_index[j, select_index] = True
             x[transfer_index] = x0[transfer_index]
             
-            if save_logits:
-                agg_X, agg_y = create_datapoint(agg_X, agg_y, logits_with_noise[:, prompt.shape[1]:, :], ~transfer_index[:,prompt.shape[1]:], i)
-            else:
-                agg_X, agg_y = create_datapoint(agg_X, agg_y, hidden_states[:, prompt.shape[1]:, :], ~transfer_index[:,prompt.shape[1]:], i)
+            agg_X, agg_y = create_datapoint(agg_X, agg_y, hidden_states[:, prompt.shape[1]:, :].cpu(), ~(x == mask_index)[:,prompt.shape[1]:].cpu(), i)
             print(len(agg_X))
             
     return x, agg_X, agg_y
@@ -137,7 +134,7 @@ def parse_args():
 
     parser.add_argument('--steps', type=int, default=64,
                       help='Number of steps')
-    parser.add_argument('--block_length', type=int, default=8,
+    parser.add_argument('--block_length', type=int, default=128,
                       help='Block length for generation')
     parser.add_argument('--gen_length', type=int, default=128,
                       help='Generation length') 
