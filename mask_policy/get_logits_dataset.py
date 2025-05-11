@@ -121,8 +121,9 @@ def generate_for_datagen(agg_X, agg_y, model, prompt, steps=128, gen_length=128,
                 _, select_index = torch.topk(confidence[j], k=num_transfer_tokens[j, i])
                 transfer_index[j, select_index] = True
             x[transfer_index] = x0[transfer_index]
+            print(x)
             
-            agg_X, agg_y = create_datapoint(agg_X, agg_y, hidden_states[:, prompt.shape[1]:, :].cpu(), ~(x == mask_index)[:,prompt.shape[1]:].cpu(), i)
+            agg_X, agg_y = create_datapoint(agg_X, agg_y, hidden_states[:, prompt.shape[1]:, :].cpu(), ~(x == mask_id)[:,prompt.shape[1]:].cpu(), i)
             print(len(agg_X))
             
     return x, agg_X, agg_y
