@@ -29,3 +29,6 @@ unzip lm-evaluation-harness.zip
 cd lm-eval-harness
 
 python -m lm_eval --model hf --model_args '{"pretrained": "GSAI-ML/LLaDA-8B-Instruct", "trust_remote_code": true}' --tasks "tinyGSM8k" or "gsm8k" --num_fewshot 4 --output_path gsm8k_results.json
+
+use custom model
+python -m lm_eval --model hf --model_args '{"pretrained": "GSAI-ML/LLaDA-8B-Instruct", "trust_remote_code": true}' --tasks "tinyGSM8k" --num_fewshot 4 --output_path gsm8k_results.json --gen_kwargs '{"steps": 64, "gen_length": 128, "block_length": 128, "mask_policy": "low_confidence", "model_path": "../../mask_policy/policy_100x64s8bs.pth"}'
