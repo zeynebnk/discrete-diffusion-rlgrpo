@@ -1,5 +1,13 @@
 # discrete-diffusion-rlgrpo
 
+## sw rl - endtoend
+generates w mask up to target step # (no grad), low conf after. currently 1 dp + all 64 steps. set G, grpo temp, etc.
+
+```
+# python rl_integrated.py
+```
+
+
 ## sw rl
 generate stepwise simulation dataset
 
