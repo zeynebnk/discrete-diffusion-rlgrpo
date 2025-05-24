@@ -37,7 +37,7 @@ class MaskPolicy(nn.Module):
 
 
 
-from modelling_llada import (
+from modeling_llada import (
     ModelConfig,
     BufferCache,
     RotaryEmbedding,
