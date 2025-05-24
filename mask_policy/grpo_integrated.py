@@ -145,7 +145,7 @@ def rollouts(model, mask_policy, target_step, prompt, G, grpo_temp, restrict = T
 
         if i < target_step:
             # use mask policy! (pre target step)
-            x0_p = mask_policy(hidden_states[:, prompt.shape[1]:, :].to(torch.float32))
+            x0_p = 1 - mask_policy(hidden_states[:, prompt.shape[1]:, :].to(torch.float32))
             ones = torch.ones((x0_p.shape[0], prompt.shape[1]), device=x0_p.device)
             x0_p = torch.cat([ones, x0_p], dim=1)
 
