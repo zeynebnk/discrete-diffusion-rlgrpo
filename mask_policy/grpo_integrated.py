@@ -19,7 +19,7 @@ def load_model():
     model = AutoModel.from_pretrained("GSAI-ML/LLaDA-8B-Instruct", trust_remote_code=True).to('cuda')
     return tokenizer, model
 
-def get_reward(trajs):
+def get_reward(trajs): 
     return torch.randn(len(trajs)).view(-1, 2).to(device)
 
 def train():
